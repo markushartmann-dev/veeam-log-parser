@@ -1,0 +1,9 @@
+services:
+  veeam-log-parser:
+    build: .
+    container_name: veeam-log-parser
+    ports:
+      - "5050:5000"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1

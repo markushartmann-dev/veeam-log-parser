@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veeam Log Parser</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+      --border: #2e3350; --accent: #00b4ff; --accent-dim: #0077aa;
+      --text: #e2e8f0; --text-dim: #8892a4;
+      --success: #22c55e; --warning: #f59e0b; --error: #ef4444;
+      --info: #60a5fa; --radius: 8px; --sidebar-w: 290px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    #sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    #sidebar-header { padding: 18px 16px 14px; border-bottom: 1px solid var(--border); }
+    #sidebar-header h1 { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+    #sidebar-header p { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    #session-list { flex: 1; overflow-y: auto; padding: 6px; }
+
+    .session-item { padding: 9px 12px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; margin-bottom: 3px; transition: background .15s; }
+    .session-item:hover { background: var(--surface2); }
+    .session-item.active { background: var(--surface2); border-color: var(--accent-dim); }
+    .session-item .s-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-item .s-meta { font-size: 11px; color: var(--text-dim); margin-top: 3px; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+    .session-item .s-date { font-size: 10px; color: var(--text-dim); font-family: monospace; }
+
+    .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .badge.success { background: #052e16; color: var(--success); }
+    .badge.warning { background: #2d1f02; color: var(--warning); }
+    .badge.failed  { background: #2d0a0a; color: var(--error); }
+    .badge.unknown,.badge.info { background: var(--surface2); color: var(--text-dim); }
+
+    #upload-zone { margin: 8px; border: 2px dashed var(--border); border-radius: var(--radius); padding: 18px 14px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+    #upload-zone:hover, #upload-zone.drag-over { border-color: var(--accent); background: #001828; }
+    #upload-zone .icon { font-size: 26px; line-height: 1; }
+    #upload-zone p { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
+    #upload-input { display: none; }
+    #upload-btn { margin: 3px 8px 8px; width: calc(100% - 16px); background: var(--accent-dim); color: #fff; border: none; border-radius: var(--radius); padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    #upload-btn:hover { background: var(--accent); }
+    #upload-btn:disabled { opacity: .5; cursor: default; }
+
+    /* ── Main ── */
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 20px; gap: 2px; }
+    .tab { padding: 13px 16px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .cnt { background: var(--surface2); color: var(--text-dim); font-size: 10px; padding: 1px 6px; border-radius: 999px; }
+    .tab.active .cnt { background: var(--accent-dim); color: #fff; }
+
+    #content { flex: 1; overflow-y: auto; padding: 22px 24px; }
+
+    #welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 14px; opacity: .6; }
+    #welcome .big-icon { font-size: 60px; }
+    #welcome h2 { font-size: 20px; font-weight: 700; }
+    #welcome p { font-size: 13px; color: var(--text-dim); max-width: 320px; line-height: 1.6; }
+
+    .panel { display: none; }
+    .panel.visible { display: block; }
+
+    /* ── Stats grid ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .stat-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; }
+    .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; line-height: 1; }
+    .stat-card .sub { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .stat-card.c-success .value { color: var(--success); }
+    .stat-card.c-warning .value { color: var(--warning); }
+    .stat-card.c-error   .value { color: var(--error); }
+    .stat-card.c-accent  .value { color: var(--accent); }
+
+    /* ── Load bar ── */
+    .load-bar-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
+    .load-bar-wrap h3 { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+    .load-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .load-row .lbl { font-size: 11px; color: var(--text-dim); width: 60px; text-align: right; }
+    .load-row .bar-bg { flex: 1; height: 10px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+    .load-row .bar-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+    .load-row .pct { font-size: 11px; color: var(--text-dim); width: 32px; }
+
+    /* ── Section title ── */
+    .section-title { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 10px; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 22px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: var(--surface2); }
+    th { padding: 9px 14px; text-align: left; font-weight: 600; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+    td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: #ffffff07; }
+    td.mono { font-family: 'Consolas', monospace; font-size: 12px; }
+
+    /* ── Charts ── */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+    @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+    .chart-card h3 { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+    .chart-card canvas { max-height: 200px; }
+
+    /* ── Error/Warning cards ── */
+    .log-entry-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 15px; margin-bottom: 7px; border-left: 3px solid var(--error); }
+    .log-entry-card.warning { border-left-color: var(--warning); }
+    .log-entry-card.info    { border-left-color: var(--info); }
+    .entry-header { display: flex; gap: 8px; align-items: center; margin-bottom: 5px; flex-wrap: wrap; }
+    .entry-ts { font-size: 10px; color: var(--text-dim); font-family: monospace; }
+    .entry-line { font-size: 10px; color: var(--text-dim); }
+    .entry-msg { font-size: 12px; font-family: 'Consolas', monospace; color: var(--text); word-break: break-word; line-height: 1.5; }
+
+    /* ── Raw log ── */
+    #log-controls { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+    #log-search { flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 12px; color: var(--text); font-size: 13px; outline: none; }
+    #log-search:focus { border-color: var(--accent); }
+    .filter-btn { padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .filter-btn:hover { background: var(--surface2); }
+    .filter-btn.active { background: var(--surface2); border-color: var(--accent-dim); color: var(--text); }
+    .filter-btn.f-error.active  { border-color: var(--error); color: var(--error); }
+    .filter-btn.f-warn.active   { border-color: var(--warning); color: var(--warning); }
+    .filter-btn.f-info.active   { border-color: var(--info); color: var(--info); }
+    #log-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+    #log-table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+    #log-table { width: 100%; border-collapse: collapse; font-family: 'Consolas', monospace; font-size: 12px; }
+    #log-table thead { background: var(--surface2); }
+    #log-table th { padding: 7px 12px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; white-space: nowrap; }
+    #log-table td { padding: 4px 12px; border-top: 1px solid #1e2236; white-space: pre-wrap; word-break: break-all; vertical-align: top; }
+    #log-table tr:hover td { background: #ffffff06; }
+    .ll-num { color: var(--text-dim); min-width: 50px; user-select: none; }
+    .ll-ts  { color: #7c8fb0; min-width: 175px; white-space: nowrap; }
+    .ll-thr { color: #5a6a8a; min-width: 40px; }
+    .ll-lvl { min-width: 70px; font-weight: 700; }
+    .lvl-info    { color: var(--info); }
+    .lvl-warning { color: var(--warning); }
+    .lvl-error,.lvl-failed { color: var(--error); }
+    .lvl-success { color: var(--success); }
+
+    #log-pagination { display: flex; gap: 5px; align-items: center; margin-top: 10px; justify-content: center; }
+    .page-btn { padding: 5px 11px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); font-size: 12px; cursor: pointer; }
+    .page-btn:hover { background: var(--surface2); }
+    .page-btn.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
+    .page-btn:disabled { opacity: .4; cursor: default; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 5px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; z-index: 100; opacity: 0; transition: opacity .3s; pointer-events: none; }
+    #toast.show { opacity: 1; }
+    #toast.err { border-color: var(--error); color: var(--error); }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  </style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div id="sidebar-header">
+    <h1>&#9632; Veeam Log Parser</h1>
+    <p>Backup &amp; Replication 12.x</p>
+  </div>
+
+  <div id="upload-zone" onclick="document.getElementById('upload-input').click()">
+    <div class="icon">&#128196;</div>
+    <strong style="font-size:12px">Log-Dateien ablegen</strong>
+    <p>oder klicken &middot; Job / Task / Agent<br>.log &middot; .txt &middot; max. 200 MB</p>
+  </div>
+  <input type="file" id="upload-input" multiple accept=".log,.txt" />
+  <button id="upload-btn" disabled>Analysieren</button>
+  <button id="clear-btn" onclick="clearAll()" style="display:none;margin:0 8px 8px;width:calc(100% - 16px);background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#128465; Alle Logs entfernen</button>
+
+  <div id="session-list"></div>
+</aside>
+
+<div id="main">
+  <nav id="tabs">
+    <div class="tab active" data-tab="dashboard">&#9783; Dashboard</div>
+    <div class="tab" data-tab="errors">&#9888; Fehler &amp; Warnungen <span class="cnt" id="tc-errors">0</span></div>
+    <div class="tab" data-tab="perf">&#10230; Performance</div>
+    <div class="tab" data-tab="raw">&#9776; Raw Log <span class="cnt" id="tc-raw">0</span></div>
+  </nav>
+
+  <div id="content">
+    <div id="welcome">
+      <div class="big-icon">&#128228;</div>
+      <h2>Veeam Log Parser</h2>
+      <p>Lade Job-, Task- oder Agent-Logs hoch. Job-Logs mit mehreren Sessions werden automatisch aufgeteilt.</p>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="panel-dashboard" class="panel">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div id="load-section"></div>
+      <div class="section-title" id="vm-section-title" style="display:none">Verarbeitete VMs / Tasks</div>
+      <div class="table-wrap" id="vm-table-wrap" style="display:none">
+        <table><thead><tr>
+          <th>VM / Task</th><th>Status</th><th>Dauer</th><th>Übertragen</th><th>Rate</th>
+        </tr></thead><tbody id="vm-tbody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Errors & Warnings -->
+    <div id="panel-errors" class="panel">
+      <div id="error-controls" style="display:flex;gap:7px;margin-bottom:13px;flex-wrap:wrap;">
+        <button class="filter-btn active" data-ef="all">Alle</button>
+        <button class="filter-btn f-error" data-ef="error">Fehler</button>
+        <button class="filter-btn f-warn"  data-ef="warning">Warnungen</button>
+        <button class="filter-btn f-info"  data-ef="info">Info</button>
+      </div>
+      <div id="error-list"></div>
+    </div>
+
+    <!-- Performance -->
+    <div id="panel-perf" class="panel">
+      <div class="chart-grid">
+        <div class="chart-card"><h3>Backup-Status (alle Sessions)</h3><canvas id="chart-status"></canvas></div>
+        <div class="chart-card"><h3>Quell-Datenmenge (GB)</h3><canvas id="chart-data"></canvas></div>
+        <div class="chart-card"><h3>Backup-Gr&ouml;&szlig;e komprimiert (GB)</h3><canvas id="chart-backup"></canvas></div>
+        <div class="chart-card"><h3>Dauer (Minuten)</h3><canvas id="chart-duration"></canvas></div>
+      </div>
+      <div class="section-title">Aktuelle Session — Details</div>
+      <div class="stats-grid" id="perf-stats"></div>
+    </div>
+
+    <!-- Raw Log -->
+    <div id="panel-raw" class="panel">
+      <div id="log-controls">
+        <input type="text" id="log-search" placeholder="&#128269; Suche in Nachrichten..." oninput="filterLog()" />
+        <button class="filter-btn active" data-lf="all"     onclick="setLogFilter('all',this)">Alle</button>
+        <button class="filter-btn f-error" data-lf="error"   onclick="setLogFilter('error',this)">Fehler</button>
+        <button class="filter-btn f-warn"  data-lf="warning" onclick="setLogFilter('warning',this)">Warnungen</button>
+        <span id="log-count"></span>
+      </div>
+      <div id="log-table-wrap">
+        <table id="log-table">
+          <thead><tr>
+            <th class="ll-num">#</th>
+            <th class="ll-ts">Timestamp</th>
+            <th class="ll-thr">Thread</th>
+            <th class="ll-lvl">Level</th>
+            <th>Nachricht</th>
+          </tr></thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+      <div id="log-pagination"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let sessions = [];
+let activeIdx = -1;
+let pendingFiles = [];
+let logFilter = 'all';
+let logPage = 0;
+let filteredEntries = [];
+let errFilter = 'all';
+const PAGE_SIZE = 500;
+let charts = {};
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+const uploadInput = document.getElementById('upload-input');
+const uploadBtn   = document.getElementById('upload-btn');
+const uploadZone  = document.getElementById('upload-zone');
+
+uploadInput.addEventListener('change', () => {
+  pendingFiles = Array.from(uploadInput.files);
+  uploadBtn.disabled = !pendingFiles.length;
+  uploadBtn.textContent = pendingFiles.length ? `${pendingFiles.length} Datei(en) analysieren` : 'Analysieren';
+});
+
+['dragover', 'dragenter'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('drag-over'); }));
+['dragleave', 'drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('drag-over'); }));
+uploadZone.addEventListener('drop', e => {
+  const files = Array.from(e.dataTransfer.files).filter(f => /\.(log|txt)$/i.test(f.name));
+  if (!files.length) { showToast('Nur .log / .txt Dateien', true); return; }
+  pendingFiles = files;
+  uploadBtn.disabled = false;
+  uploadBtn.textContent = `${files.length} Datei(en) analysieren`;
+});
+
+uploadBtn.addEventListener('click', async () => {
+  if (!pendingFiles.length) return;
+  uploadBtn.disabled = true;
+  uploadBtn.innerHTML = '<span class="spinner"></span>Analysiere…';
+  const fd = new FormData();
+  pendingFiles.forEach(f => fd.append('files', f));
+  try {
+    const resp = await fetch('/api/parse', { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const results = await resp.json();
+    let added = 0;
+    results.forEach(r => {
+      if (r.error) { showToast(`${r.filename}: ${r.error}`, true); return; }
+      sessions.push(r);
+      added++;
+    });
+    renderSidebar();
+    if (added > 0) setActive(sessions.length - added);
+    pendingFiles = [];
+    uploadInput.value = '';
+    uploadBtn.textContent = 'Analysieren';
+    showToast(`${added} Session(s) geladen`);
+  } catch(e) {
+    showToast('Fehler: ' + e.message, true);
+    uploadBtn.textContent = 'Analysieren';
+  }
+  uploadBtn.disabled = false;
+});
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  document.getElementById('session-list').innerHTML = sessions.map((s, i) => {
+    const date = s.start_time ? s.start_time.substring(0, 10) : '';
+    const typeLabel = { job: 'Job', task: 'Task', agent: 'Agent', unknown: '?' }[s.log_type] || '?';
+    return `<div class="session-item ${i===activeIdx?'active':''}" onclick="setActive(${i})">
+      <div class="s-name">${esc(s.job_name || s.filename)}</div>
+      <div class="s-meta">
+        <span class="badge ${s.status.toLowerCase()}">${s.status}</span>
+        <span class="badge unknown">${typeLabel}</span>
+        <span class="s-date">${date}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('clear-btn').style.display = sessions.length ? '' : 'none';
+}
+
+function setActive(i) {
+  activeIdx = i;
+  renderSidebar();
+  const s = sessions[i];
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('tc-errors').textContent = s.error_count + s.warning_count;
+  document.getElementById('tc-raw').textContent = s.entry_count;
+  renderDashboard(s);
+  renderErrors(s);
+  renderPerf(s);
+  renderRawLog(s);
+  showTab(document.querySelector('.tab.active')?.dataset.tab || 'dashboard');
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('visible'));
+  const p = document.getElementById('panel-' + name);
+  if (p) p.classList.add('visible');
+}
+
+// ─── Dashboard ───────────────────────────────────────────────────────────────
+function renderDashboard(s) {
+  const dur = s.duration_sec != null ? fmtDur(s.duration_sec) : '–';
+  const grid = document.getElementById('stats-grid');
+
+  const cards = [
+    { label: 'Status',   value: s.status,   cls: s.status.toLowerCase(), big: true },
+    { label: 'Fehler',   value: s.error_count,   cls: 'c-error' },
+    { label: 'Warnungen',value: s.warning_count, cls: 'c-warning' },
+    { label: 'Dauer',    value: dur,         cls: '', small: true },
+  ];
+
+  if (s.transferred_gb != null)
+    cards.push({ label: 'Quelldaten',  value: fmtGb(s.transferred_gb), cls: 'c-accent', small: true });
+  if (s.backed_up_gb != null)
+    cards.push({ label: 'Gesichert (inkremental)', value: fmtGb(s.backed_up_gb), cls: '', small: true });
+  if (s.backup_size_gb != null)
+    cards.push({ label: 'Backup-Größe (komprimiert)', value: fmtGb(s.backup_size_gb), cls: '', small: true });
+  if (s.data_size_gb != null)
+    cards.push({ label: 'Quelldaten (raw)', value: fmtGb(s.data_size_gb), cls: '', small: true });
+  if (s.dedup_ratio != null)
+    cards.push({ label: 'Deduplizierung', value: s.dedup_ratio + '%', cls: 'c-accent', small: true });
+  if (s.compress_ratio != null)
+    cards.push({ label: 'Komprimierung', value: s.compress_ratio + '%', cls: 'c-accent', small: true });
+  if (s.total_tasks != null)
+    cards.push({ label: 'Tasks', value: `${s.successful_tasks}/${s.total_tasks}`, cls: s.failed_tasks > 0 ? 'c-error' : 'c-success', small: true, sub: s.failed_tasks > 0 ? `${s.failed_tasks} fehlgeschlagen` : 'alle erfolgreich' });
+  if (s.bottleneck)
+    cards.push({ label: 'Bottleneck', value: s.bottleneck, cls: '', small: true });
+  if (s.total_repo_gb != null)
+    cards.push({ label: 'Repo gesamt', value: fmtGb(s.total_repo_gb), cls: '', small: true });
+
+  grid.innerHTML = cards.map(c => `
+    <div class="stat-card ${c.cls || ''}">
+      <div class="label">${c.label}</div>
+      <div class="value" style="${c.small?'font-size:18px;margin-top:6px':''}">${esc(String(c.value))}</div>
+      ${c.sub ? `<div class="sub">${esc(c.sub)}</div>` : ''}
+    </div>`).join('');
+
+  // Load bar
+  const loadSec = document.getElementById('load-section');
+  if (s.load) {
+    const colors = { source: '#ef4444', proxy: '#f59e0b', network: '#22c55e', target: '#60a5fa' };
+    const labels = { source: 'Source', proxy: 'Proxy', network: 'Network', target: 'Target' };
+    loadSec.innerHTML = `<div class="load-bar-wrap">
+      <h3>Last-Verteilung</h3>
+      ${Object.entries(s.load).map(([k, v]) => `
+        <div class="load-row">
+          <span class="lbl">${labels[k]}</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${v}%;background:${colors[k]}"></div></div>
+          <span class="pct">${v}%</span>
+        </div>`).join('')}
+    </div>`;
+  } else {
+    loadSec.innerHTML = '';
+  }
+
+  // VM table (usually empty for job logs, data is in task logs)
+  const vt = document.getElementById('vm-table-wrap');
+  const vtitle = document.getElementById('vm-section-title');
+  if (s.vms && s.vms.length) {
+    vtitle.style.display = '';
+    vt.style.display = '';
+    document.getElementById('vm-tbody').innerHTML = s.vms.map(v => `<tr>
+      <td>${esc(v.name)}</td>
+      <td><span class="badge ${v.status.toLowerCase()}">${v.status}</span></td>
+      <td class="mono">${v.duration_sec != null ? fmtDur(v.duration_sec) : '–'}</td>
+      <td class="mono">${v.transferred_gb != null ? fmtGb(v.transferred_gb) : '–'}</td>
+      <td class="mono">${v.rate_mbps != null ? v.rate_mbps.toFixed(1)+' MB/s' : '–'}</td>
+    </tr>`).join('');
+  } else {
+    vtitle.style.display = 'none';
+    vt.style.display = 'none';
+  }
+}
+
+// ─── Errors ───────────────────────────────────────────────────────────────────
+function renderErrors(s) {
+  document.querySelectorAll('#error-controls .filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.ef === errFilter);
+    b.onclick = () => {
+      errFilter = b.dataset.ef;
+      document.querySelectorAll('#error-controls .filter-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      renderErrors(sessions[activeIdx]);
+    };
+  });
+
+  let items = [];
+  if (errFilter === 'all')
+    items = [...s.errors, ...s.warnings].sort((a,b) => a.line_number - b.line_number);
+  else if (errFilter === 'error')
+    items = s.errors;
+  else if (errFilter === 'warning')
+    items = s.warnings;
+  else if (errFilter === 'info')
+    items = s.entries.filter(e => e.level.toLowerCase() === 'info');
+
+  const el = document.getElementById('error-list');
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:14px">&#10003; Keine Eintr&auml;ge</div>';
+    return;
+  }
+  el.innerHTML = items.map(e => {
+    const lvl = e.level.toLowerCase();
+    const cardCls = lvl === 'warning' ? 'warning' : lvl === 'info' ? 'info' : '';
+    return `
+    <div class="log-entry-card ${cardCls}">
+      <div class="entry-header">
+        <span class="badge ${lvl}">${e.level}</span>
+        ${e.timestamp ? `<span class="entry-ts">${esc(e.timestamp)}</span>` : ''}
+        ${e.thread ? `<span class="entry-ts">&lt;${esc(e.thread)}&gt;</span>` : ''}
+        <span class="entry-line">Zeile ${e.line_number}</span>
+      </div>
+      <div class="entry-msg">${esc(e.message)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Performance ──────────────────────────────────────────────────────────────
+function renderPerf(s) {
+  destroyCharts();
+
+  const labels = sessions.map(x => {
+    const d = x.start_time ? x.start_time.substring(0,10) : '';
+    return (x.job_name || x.filename).substring(0, 20) + (d ? '\n'+d : '');
+  });
+
+  const statusColors = { Success:'#22c55e', Warning:'#f59e0b', Failed:'#ef4444', Unknown:'#8892a4', Info:'#60a5fa' };
+  charts.status = new Chart(document.getElementById('chart-status'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(statusColors),
+      datasets:[{ data: Object.keys(statusColors).map(k => sessions.filter(x=>x.status===k).length),
+        backgroundColor: Object.values(statusColors), borderWidth: 0 }]
+    },
+    options: { plugins:{ legend:{ labels:{ color:'#8892a4', boxWidth:12 } } } }
+  });
+
+  const barOpts = () => ({
+    plugins: { legend:{ display:false } },
+    scales: {
+      x:{ ticks:{ color:'#8892a4', font:{size:10} }, grid:{ color:'#1e2236' } },
+      y:{ ticks:{ color:'#8892a4' }, grid:{ color:'#1e2236' } }
+    }
+  });
+
+  charts.data = new Chart(document.getElementById('chart-data'), {
+    type: 'bar',
+    data: { labels, datasets:[{ data: sessions.map(x => x.transferred_gb ?? x.data_size_gb), backgroundColor:'#0077aa', borderRadius:3 }] },
+    options: barOpts()
+  });
+  charts.backup = new Chart(document.getElementById('chart-backup'), {
+    type: 'bar',
+    data: { labels, datasets:[{ data: sessions.map(x => x.backup_size_gb ?? x.backed_up_gb), backgroundColor:'#7c3aed', borderRadius:3 }] },
+    options: barOpts()
+  });
+  charts.duration = new Chart(document.getElementById('chart-duration'), {
+    type: 'bar',
+    data: { labels, datasets:[{ data: sessions.map(x => x.duration_sec != null ? (x.duration_sec/60).toFixed(1) : null), backgroundColor:'#059669', borderRadius:3 }] },
+    options: barOpts()
+  });
+
+  // Perf stats for current session
+  const ps = document.getElementById('perf-stats');
+  const items = [];
+  if (s.dedup_ratio != null)    items.push(['Deduplizierung', s.dedup_ratio + '%', 'c-accent']);
+  if (s.compress_ratio != null) items.push(['Komprimierung', s.compress_ratio + '%', 'c-accent']);
+  if (s.bottleneck)             items.push(['Bottleneck', s.bottleneck, '']);
+  if (s.backed_up_gb != null)   items.push(['Gesichert', fmtGb(s.backed_up_gb), '']);
+  if (s.backup_size_gb != null) items.push(['Komprimiert', fmtGb(s.backup_size_gb), '']);
+  if (s.data_size_gb != null)   items.push(['Quelldaten', fmtGb(s.data_size_gb), '']);
+  ps.innerHTML = items.map(([l, v, c]) => `
+    <div class="stat-card ${c}">
+      <div class="label">${l}</div>
+      <div class="value" style="font-size:20px;margin-top:6px">${esc(v)}</div>
+    </div>`).join('');
+}
+
+function destroyCharts() { Object.values(charts).forEach(c => c.destroy()); charts = {}; }
+
+// ─── Raw Log ──────────────────────────────────────────────────────────────────
+function renderRawLog(s) {
+  logFilter = 'all'; logPage = 0;
+  document.querySelectorAll('#log-controls .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.lf==='all'));
+  document.getElementById('log-search').value = '';
+  filteredEntries = s.entries;
+  renderLogPage();
+}
+
+function setLogFilter(f, btn) {
+  logFilter = f; logPage = 0;
+  document.querySelectorAll('#log-controls .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterLog();
+}
+
+function filterLog() {
+  if (activeIdx < 0) return;
+  const s = sessions[activeIdx];
+  const q = document.getElementById('log-search').value.toLowerCase();
+  filteredEntries = s.entries.filter(e => {
+    const lm = logFilter === 'all' ? true
+      : logFilter === 'error'   ? ['error','failed'].includes(e.level.toLowerCase())
+      : logFilter === 'warning' ? e.level.toLowerCase() === 'warning' : true;
+    return lm && (!q || e.raw.toLowerCase().includes(q));
+  });
+  logPage = 0;
+  renderLogPage();
+}
+
+function renderLogPage() {
+  const q = document.getElementById('log-search').value;
+  const total = filteredEntries.length;
+  const page = filteredEntries.slice(logPage * PAGE_SIZE, (logPage + 1) * PAGE_SIZE);
+  document.getElementById('log-count').textContent = total.toLocaleString('de') + ' Zeilen';
+
+  document.getElementById('log-tbody').innerHTML = page.map(e => {
+    const lvl = (e.level || 'info').toLowerCase();
+    const msg = q ? hlSearch(esc(e.message || ''), q) : esc(e.message || '');
+    return `<tr>
+      <td class="ll-num">${e.line_number}</td>
+      <td class="ll-ts">${esc(e.timestamp || '')}</td>
+      <td class="ll-thr">${e.thread ? '&lt;'+esc(e.thread)+'&gt;' : ''}</td>
+      <td class="ll-lvl lvl-${lvl}">${e.level || ''}</td>
+      <td>${msg}</td>
+    </tr>`;
+  }).join('');
+
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const pag = document.getElementById('log-pagination');
+  if (pages <= 1) { pag.innerHTML = ''; return; }
+  let html = `<button class="page-btn" onclick="goPage(${logPage-1})" ${logPage===0?'disabled':''}>&#8592;</button>`;
+  const s2 = Math.max(0, logPage-2), e2 = Math.min(pages-1, logPage+2);
+  if (s2>0) html += `<button class="page-btn" onclick="goPage(0)">1</button><span style="color:var(--text-dim)">…</span>`;
+  for (let p=s2;p<=e2;p++) html += `<button class="page-btn ${p===logPage?'active':''}" onclick="goPage(${p})">${p+1}</button>`;
+  if (e2<pages-1) html += `<span style="color:var(--text-dim)">…</span><button class="page-btn" onclick="goPage(${pages-1})">${pages}</button>`;
+  html += `<button class="page-btn" onclick="goPage(${logPage+1})" ${logPage===pages-1?'disabled':''}>&#8594;</button>`;
+  pag.innerHTML = html;
+}
+
+function goPage(p) { logPage = p; renderLogPage(); document.getElementById('log-table-wrap').scrollTop = 0; }
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hlSearch(escaped, q) {
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+  return escaped.replace(re, m => `<mark style="background:#403000;color:#fcd34d;border-radius:2px">${m}</mark>`);
+}
+function fmtDur(sec) {
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+function fmtGb(gb) {
+  if (gb >= 1024) return (gb/1024).toFixed(2) + ' TB';
+  if (gb >= 1)    return gb.toFixed(2) + ' GB';
+  return (gb*1024).toFixed(0) + ' MB';
+}
+function clearAll() {
+  sessions = [];
+  activeIdx = -1;
+  pendingFiles = [];
+  uploadInput.value = '';
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = 'Analysieren';
+  document.getElementById('session-list').innerHTML = '';
+  document.getElementById('clear-btn').style.display = 'none';
+  document.getElementById('welcome').style.display = '';
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('visible'));
+  document.getElementById('tc-errors').textContent = '0';
+  document.getElementById('tc-raw').textContent = '0';
+  errFilter = 'all';
+  destroyCharts();
+}
+
+function showToast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (err?' err':'');
+  setTimeout(() => t.className='', 3500);
+}
+</script>
+</body>
+</html>
