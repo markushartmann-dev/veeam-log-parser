@@ -12,6 +12,8 @@
       --text: #e2e8f0; --text-dim: #8892a4;
       --success: #22c55e; --warning: #f59e0b; --error: #ef4444;
       --info: #60a5fa; --radius: 8px; --sidebar-w: 290px;
+      --badge-success-bg: #052e16; --badge-warning-bg: #2d1f02; --badge-error-bg: #2d0a0a;
+      --row-hover: rgba(255,255,255,.04); --upload-hover-bg: #001828;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
@@ -31,13 +33,13 @@
     .session-item .s-date { font-size: 10px; color: var(--text-dim); font-family: monospace; }
 
     .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
-    .badge.success { background: #052e16; color: var(--success); }
-    .badge.warning { background: #2d1f02; color: var(--warning); }
-    .badge.failed  { background: #2d0a0a; color: var(--error); }
+    .badge.success { background: var(--badge-success-bg); color: var(--success); }
+    .badge.warning { background: var(--badge-warning-bg); color: var(--warning); }
+    .badge.failed  { background: var(--badge-error-bg);   color: var(--error); }
     .badge.unknown,.badge.info { background: var(--surface2); color: var(--text-dim); }
 
     #upload-zone { margin: 8px; border: 2px dashed var(--border); border-radius: var(--radius); padding: 18px 14px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
-    #upload-zone:hover, #upload-zone.drag-over { border-color: var(--accent); background: #001828; }
+    #upload-zone:hover, #upload-zone.drag-over { border-color: var(--accent); background: var(--upload-hover-bg); }
     #upload-zone .icon { font-size: 26px; line-height: 1; }
     #upload-zone p { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
     #upload-input { display: none; }
@@ -93,7 +95,7 @@
     thead { background: var(--surface2); }
     th { padding: 9px 14px; text-align: left; font-weight: 600; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
     td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
-    tr:hover td { background: #ffffff07; }
+    tr:hover td { background: var(--row-hover); }
     td.mono { font-family: 'Consolas', monospace; font-size: 12px; }
 
     /* ── Charts ── */
@@ -128,8 +130,8 @@
     #log-table { width: 100%; border-collapse: collapse; font-family: 'Consolas', monospace; font-size: 12px; }
     #log-table thead { background: var(--surface2); }
     #log-table th { padding: 7px 12px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; white-space: nowrap; }
-    #log-table td { padding: 4px 12px; border-top: 1px solid #1e2236; white-space: pre-wrap; word-break: break-all; vertical-align: top; }
-    #log-table tr:hover td { background: #ffffff06; }
+    #log-table td { padding: 4px 12px; border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-all; vertical-align: top; }
+    #log-table tr:hover td { background: var(--row-hover); }
     .ll-num { color: var(--text-dim); min-width: 50px; user-select: none; }
     .ll-ts  { color: #7c8fb0; min-width: 175px; white-space: nowrap; }
     .ll-thr { color: #5a6a8a; min-width: 40px; }
@@ -152,6 +154,12 @@
     #toast.show { opacity: 1; }
     #toast.err { border-color: var(--error); color: var(--error); }
 
+    /* ── Theme switcher ── */
+    .theme-switcher { display: flex; gap: 5px; margin-top: 10px; }
+    .theme-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; padding: 0; }
+    .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .theme-btn.active { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
   </style>
@@ -162,6 +170,7 @@
   <div id="sidebar-header">
     <h1>&#9632; Veeam Log Parser</h1>
     <p>Backup &amp; Replication 12.x</p>
+    <div class="theme-switcher" id="theme-switcher"></div>
   </div>
 
   <div id="upload-zone" onclick="document.getElementById('upload-input').click()">
@@ -255,6 +264,74 @@
 <div id="toast"></div>
 
 <script>
+// ─── Theme engine ─────────────────────────────────────────────────────────────
+const THEMES = {
+  dark: {
+    '--bg':'#0f1117','--surface':'#1a1d27','--surface2':'#22263a',
+    '--border':'#2e3350','--accent':'#00b4ff','--accent-dim':'#0077aa',
+    '--text':'#e2e8f0','--text-dim':'#8892a4',
+    '--success':'#22c55e','--warning':'#f59e0b','--error':'#ef4444','--info':'#60a5fa',
+    '--badge-success-bg':'#052e16','--badge-warning-bg':'#2d1f02','--badge-error-bg':'#2d0a0a',
+    '--row-hover':'rgba(255,255,255,.04)','--upload-hover-bg':'#001828',
+  },
+  light: {
+    '--bg':'#f1f5f9','--surface':'#ffffff','--surface2':'#e8edf4',
+    '--border':'#cbd5e1','--accent':'#0077cc','--accent-dim':'#005fa3',
+    '--text':'#1e293b','--text-dim':'#64748b',
+    '--success':'#059669','--warning':'#b45309','--error':'#dc2626','--info':'#2563eb',
+    '--badge-success-bg':'#d1fae5','--badge-warning-bg':'#fef3c7','--badge-error-bg':'#fee2e2',
+    '--row-hover':'rgba(0,0,0,.03)','--upload-hover-bg':'#dbeafe',
+  },
+  veeam: {
+    '--bg':'#071120','--surface':'#08162d','--surface2':'#0d1f38',
+    '--border':'#0d2f1a','--accent':'#00b336','--accent-dim':'#009429',
+    '--text':'#ddf0e4','--text-dim':'#6aaa7e',
+    '--success':'#00b336','--warning':'#f59e0b','--error':'#ef4444','--info':'#60a5fa',
+    '--badge-success-bg':'#012a0d','--badge-warning-bg':'#1f1500','--badge-error-bg':'#2a0505',
+    '--row-hover':'rgba(0,179,54,.04)','--upload-hover-bg':'#020e08',
+  },
+  kitty: {
+    '--bg':'#fff0f6','--surface':'#ffffff','--surface2':'#fce4ec',
+    '--border':'#f48fb1','--accent':'#e91e8c','--accent-dim':'#c2185b',
+    '--text':'#4a0030','--text-dim':'#9c1957',
+    '--success':'#ad1457','--warning':'#c05000','--error':'#c62828','--info':'#8e24aa',
+    '--badge-success-bg':'#fce4ec','--badge-warning-bg':'#fff3e0','--badge-error-bg':'#ffebee',
+    '--row-hover':'rgba(233,30,140,.04)','--upload-hover-bg':'#fce4ec',
+  },
+};
+const THEME_SVG = {
+  dark:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>',
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
+  veeam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  kitty: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="13" height="13"><path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/></svg>',
+};
+const THEME_LABELS = { dark:'Dark', light:'Light', veeam:'Veeam Corporate', kitty:'Hello Kitty' };
+
+let _theme = localStorage.getItem('vlp-theme') || 'dark';
+(function applyThemeVars(name) {
+  const vars = THEMES[name] || THEMES.dark;
+  for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
+})(_theme);
+
+function applyTheme(name) {
+  if (!THEMES[name]) name = 'dark';
+  _theme = name;
+  localStorage.setItem('vlp-theme', name);
+  const vars = THEMES[name];
+  for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === name));
+}
+
+function renderThemeSwitcher() {
+  const el = document.getElementById('theme-switcher');
+  if (!el) return;
+  el.innerHTML = Object.keys(THEMES).map(t =>
+    `<button class="theme-btn${_theme===t?' active':''}" data-theme="${t}" title="${THEME_LABELS[t]}">${THEME_SVG[t]}</button>`
+  ).join('');
+  el.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
+}
+document.addEventListener('DOMContentLoaded', renderThemeSwitcher);
+
 // ─── State ───────────────────────────────────────────────────────────────────
 let sessions = [];
 let activeIdx = -1;
