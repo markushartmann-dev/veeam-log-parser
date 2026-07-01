@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- dark background -->
+  <rect width="32" height="32" rx="6" fill="#0f1117"/>
+  <!-- V shape (Veeam + checkmark) in accent blue -->
+  <path d="M5 8 L16 24 L27 8" stroke="#00b4ff" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
