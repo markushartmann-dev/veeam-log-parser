@@ -80,7 +80,33 @@ LOAD_RE = re.compile(
 
 BOTTLENECK_RE = re.compile(r'Primary bottleneck:\s*(\S+)')
 
+# Proxy / transport-mode patterns (Job Manager logs only)
+# Request: "... ViDisk_|ViProxyRepositoryPairResourceRequest ... srv name=X : ... vddk modes=Y : ... ]:N"
+PROXY_REQ_RE = re.compile(
+    r'ViDisk_\|ViProxyRepositoryPairResourceRequest'
+    r'.*?srv name=([^:]+)'
+    r'.*?vddk modes=([^:]+)'
+    r'.*\]:(\d+)\s*$'
+)
+# Response that follows: "- - - - Response: Count: N"
+PROXY_RESP_COUNT_RE = re.compile(r'- - - - Response: Count: (\d+)')
+
 TO_GB = {'KB': 1 / 1024 / 1024, 'MB': 1 / 1024, 'GB': 1.0, 'TB': 1024.0}
+
+
+def _normalize_mode(m: str) -> str:
+    m = m.strip().lower()
+    if 'hotadd' in m:
+        return 'HotAdd'
+    if m == 'san' or 'directsan' in m or 'fibre' in m or 'iscsi' in m:
+        return 'DirectSAN'
+    if 'nbdssl' in m or 'nbd_ssl' in m:
+        return 'NBD/SSL'
+    if 'nbd' in m:
+        return 'NBD'
+    if 'nas' in m:
+        return 'NFS Direct'
+    return m.upper()
 
 
 def _de_float(s: str) -> float:
@@ -128,7 +154,7 @@ class _S:
         'successful_tasks', 'failed_tasks', 'total_tasks',
         'backup_bytes', 'data_bytes', 'dedup_ratio', 'compress_ratio',
         'transferred_bytes', 'backed_up_gb', 'total_repo_gb',
-        'bottleneck', 'load',
+        'bottleneck', 'load', 'proxy_stats',
     )
 
     def __init__(self):
@@ -152,6 +178,7 @@ class _S:
         self.total_repo_gb = None
         self.bottleneck = None
         self.load = None
+        self.proxy_stats = {}  # {(proxy_name, mode): task_count}
 
 
 def _finalize(filename: str, log_type: str, s: _S, total_lines: int) -> dict:
@@ -201,6 +228,10 @@ def _finalize(filename: str, log_type: str, s: _S, total_lines: int) -> dict:
         'bottleneck': s.bottleneck,
         'load': s.load,
         'rate_mbps': None,
+        'proxy_stats': [
+            {'proxy': proxy, 'mode': mode, 'tasks': count}
+            for (proxy, mode), count in sorted(s.proxy_stats.items(), key=lambda x: -x[1])
+        ],
     }
 
 
@@ -314,6 +345,7 @@ def _parse_manager(filename: str, lines: list, log_type: str) -> list:
     started = not need_start_marker
     # For job logs: accumulate pre-STARTBACKUPJOB lines as a potential preceding session
     pre_sess = _S() if need_start_marker else None
+    last_proxy = None  # (proxy_name, mode) set by request line, consumed by response
 
     for i, raw in enumerate(lines, 1):
         m = MGR_RE.match(raw.rstrip())
@@ -337,6 +369,7 @@ def _parse_manager(filename: str, lines: list, log_type: str) -> list:
             sess = _S()
             pre_sess = None  # only one pre-session per file
             started = True
+            last_proxy = None
             continue
 
         if not started:
@@ -347,6 +380,20 @@ def _parse_manager(filename: str, lines: list, log_type: str) -> list:
 
         # ── Accumulate entry ──────────────────────────────────────────────
         _accumulate(sess, i, ts_str, thread, task_id, level, message, raw.rstrip())
+
+        # ── Proxy / transport-mode tracking ──────────────────────────────
+        if 'ViDisk_|ViProxyRepositoryPairResourceRequest' in message:
+            pm = PROXY_REQ_RE.search(message)
+            if pm:
+                last_proxy = (pm.group(1).strip(), _normalize_mode(pm.group(2)))
+        elif last_proxy is not None:
+            if '- - - - Response: Count:' in message:
+                cm = PROXY_RESP_COUNT_RE.search(message)
+                if cm:
+                    sess.proxy_stats[last_proxy] = (
+                        sess.proxy_stats.get(last_proxy, 0) + int(cm.group(1))
+                    )
+            last_proxy = None  # clear after any line following the request
 
     if started and sess.entries:
         results.append(_finalize(filename, log_type, sess, len(lines)))
