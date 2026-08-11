@@ -91,6 +91,20 @@ PROXY_REQ_RE = re.compile(
 # Response that follows: "- - - - Response: Count: N"
 PROXY_RESP_COUNT_RE = re.compile(r'- - - - Response: Count: (\d+)')
 
+# Per-VM tracking: VM name in Job Manager log lines (task_id correlation)
+VM_NAME_RE = re.compile(
+    r"(?:Processing object|Object name)[:\s]+['\"]([^'\"]+)['\"]"
+    r"|(?:VM|Task) name[:\s]+\[([^\]]+)\]"
+    r"|Processing\s+['\"]([^'\"]+)['\"]",
+    re.I
+)
+# Transport mode in Task logs (fallback pattern)
+TASK_TRANSPORT_RE = re.compile(
+    r'(?:transport(?:\s+mode)?|mode is)[:\s]+'
+    r'(HotAdd|DirectSAN|NBDSsl|NBD\s*ssl|NBD|SAN|NAS)',
+    re.I
+)
+
 TO_GB = {'KB': 1 / 1024 / 1024, 'MB': 1 / 1024, 'GB': 1.0, 'TB': 1024.0}
 
 
@@ -154,7 +168,7 @@ class _S:
         'successful_tasks', 'failed_tasks', 'total_tasks',
         'backup_bytes', 'data_bytes', 'dedup_ratio', 'compress_ratio',
         'transferred_bytes', 'backed_up_gb', 'total_repo_gb',
-        'bottleneck', 'load', 'proxy_stats',
+        'bottleneck', 'load', 'proxy_stats', 'vm_proxy_stats',
     )
 
     def __init__(self):
@@ -178,7 +192,44 @@ class _S:
         self.total_repo_gb = None
         self.bottleneck = None
         self.load = None
-        self.proxy_stats = {}  # {(proxy_name, mode): task_count}
+        self.proxy_stats = {}    # {(proxy_name, mode): task_count}
+        self.vm_proxy_stats = [] # [{vm, proxy, mode, count}]
+
+
+def _add_vm_proxy(sess: _S, vm: str, proxy: str, mode: str) -> None:
+    """Increment per-VM transport-mode counter, inserting a new entry if needed."""
+    for e in sess.vm_proxy_stats:
+        if e['vm'] == vm and e['proxy'] == proxy and e['mode'] == mode:
+            e['count'] += 1
+            return
+    sess.vm_proxy_stats.append({'vm': vm, 'proxy': proxy, 'mode': mode, 'count': 1})
+
+
+def _vm_name_from_task_file(filename: str) -> str:
+    """Extract VM name from Task log filename: Task.VMNAME.SESSIONID.log"""
+    if not filename.lower().startswith('task.'):
+        return ''
+    inner = filename[5:]          # strip 'task.' prefix
+    parts = inner.split('.')
+    # ['VMNAME', 'SESSIONID', 'log'] → join all but last 2
+    if len(parts) > 2:
+        return '.'.join(parts[:-2])
+    return parts[0] if parts else ''
+
+
+def _build_vm_proxy(s: _S, log_type: str, filename: str) -> list:
+    """Return vm_proxy_stats, optionally deriving it for task logs from proxy_stats."""
+    if s.vm_proxy_stats:
+        return sorted(s.vm_proxy_stats, key=lambda e: (e['vm'], e['proxy'], e['mode']))
+    # For task logs: derive from proxy_stats using VM name embedded in filename
+    if log_type == 'task' and s.proxy_stats:
+        vm = _vm_name_from_task_file(filename)
+        if vm:
+            return [
+                {'vm': vm, 'proxy': proxy, 'mode': mode, 'count': count}
+                for (proxy, mode), count in sorted(s.proxy_stats.items(), key=lambda x: -x[1])
+            ]
+    return []
 
 
 def _finalize(filename: str, log_type: str, s: _S, total_lines: int) -> dict:
@@ -232,6 +283,7 @@ def _finalize(filename: str, log_type: str, s: _S, total_lines: int) -> dict:
             {'proxy': proxy, 'mode': mode, 'tasks': count}
             for (proxy, mode), count in sorted(s.proxy_stats.items(), key=lambda x: -x[1])
         ],
+        'vm_proxy_stats': _build_vm_proxy(s, log_type, filename),
     }
 
 
@@ -345,7 +397,10 @@ def _parse_manager(filename: str, lines: list, log_type: str) -> list:
     started = not need_start_marker
     # For job logs: accumulate pre-STARTBACKUPJOB lines as a potential preceding session
     pre_sess = _S() if need_start_marker else None
-    last_proxy = None  # (proxy_name, mode) set by request line, consumed by response
+    last_proxy = None    # (proxy_name, mode) set by request line, consumed by response
+    task_vm_map = {}     # {task_id: vm_name} for job log per-VM correlation
+    # For task logs extract VM name once from filename
+    vm_name_for_task = _vm_name_from_task_file(filename) if log_type == 'task' else ''
 
     for i, raw in enumerate(lines, 1):
         m = MGR_RE.match(raw.rstrip())
@@ -381,11 +436,34 @@ def _parse_manager(filename: str, lines: list, log_type: str) -> list:
         # ── Accumulate entry ──────────────────────────────────────────────
         _accumulate(sess, i, ts_str, thread, task_id, level, message, raw.rstrip())
 
+        # ── VM-name tracking (job logs, task_id correlation) ─────────────
+        if log_type == 'job' and task_id:
+            vm_m = VM_NAME_RE.search(message)
+            if vm_m:
+                vm = next((g for g in vm_m.groups() if g), '').strip()
+                if vm:
+                    task_vm_map[task_id.strip()] = vm
+
+        # ── Transport mode (task logs, text-based fallback) ───────────────
+        if log_type == 'task' and vm_name_for_task:
+            tm = TASK_TRANSPORT_RE.search(message)
+            if tm and sess.proxy_stats:
+                mode = _normalize_mode(tm.group(1))
+                proxy = next(iter(sess.proxy_stats))[0]
+                _add_vm_proxy(sess, vm_name_for_task, proxy, mode)
+
         # ── Proxy / transport-mode tracking ──────────────────────────────
         if 'ViDisk_|ViProxyRepositoryPairResourceRequest' in message:
             pm = PROXY_REQ_RE.search(message)
             if pm:
-                last_proxy = (pm.group(1).strip(), _normalize_mode(pm.group(2)))
+                proxy_name = pm.group(1).strip()
+                mode = _normalize_mode(pm.group(2))
+                last_proxy = (proxy_name, mode)
+                # Per-VM: job log via task_id, task log via filename
+                if task_id and task_id.strip() in task_vm_map:
+                    _add_vm_proxy(sess, task_vm_map[task_id.strip()], proxy_name, mode)
+                elif vm_name_for_task:
+                    _add_vm_proxy(sess, vm_name_for_task, proxy_name, mode)
         elif last_proxy is not None:
             if '- - - - Response: Count:' in message:
                 cm = PROXY_RESP_COUNT_RE.search(message)

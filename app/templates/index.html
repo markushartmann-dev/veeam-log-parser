@@ -190,7 +190,16 @@
     <h2>&#9632; Changelog <button onclick="document.getElementById('changelog-overlay').classList.remove('open')">&#215;</button></h2>
 
     <div class="cl-version">
-      <div class="cl-ver-title">v1.0.2 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
+      <div class="cl-ver-title">v1.0.3 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
+      <ul class="cl-items">
+        <li>Advanced Details: Schalter in der Proxy-Analyse zeigt pro VM / Task welcher Proxy und Transport-Mode genutzt wurde (inkl. Disk-Anzahl)</li>
+        <li>Parser erkennt VM-Namen aus Task-Log-Dateinamen und korreliert sie automatisch mit Proxy-Zuweisung</li>
+        <li>Fallback-Erkennung des Transport-Modes aus Task-Log-Textzeilen (HotAdd, DirectSAN, NBD/SSL, NBD)</li>
+      </ul>
+    </div>
+
+    <div class="cl-version">
+      <div class="cl-ver-title">v1.0.2 <span class="cl-date">2026-08-11</span></div>
       <ul class="cl-items">
         <li>Proxy &amp; Transport-Analyse: zwei Donut-Charts im Dashboard zeigen Verteilung nach Proxy-Server und VDDK-Transport-Mode (HotAdd, DirectSAN, NBD/SSL, NBD)</li>
         <li>Sidebar-Untertitel entfernt, Versionsnummer unten links ergänzt</li>
@@ -241,7 +250,7 @@
   <button id="clear-btn" onclick="clearAll()" style="display:none;margin:0 8px 8px;width:calc(100% - 16px);background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#128465; Alle Logs entfernen</button>
 
   <div id="session-list"></div>
-  <button id="version-btn" onclick="document.getElementById('changelog-overlay').classList.add('open')">v1.0.2 — Changelog</button>
+  <button id="version-btn" onclick="document.getElementById('changelog-overlay').classList.add('open')">v1.0.3 — Changelog</button>
 </aside>
 
 <div id="main">
@@ -564,9 +573,17 @@ function renderDashboard(s) {
     };
     const PROXY_PALETTE = ['#00b4ff','#7c3aed','#f59e0b','#22c55e','#ef4444','#a78bfa'];
 
+    const hasVmData = s.vm_proxy_stats && s.vm_proxy_stats.length > 0;
+    const vmRows = hasVmData ? s.vm_proxy_stats.map(e => `<tr>
+      <td>${esc(e.vm)}</td>
+      <td>${esc(e.proxy)}</td>
+      <td><span style="font-weight:700;color:${modeColor(e.mode)}">${esc(e.mode)}</span></td>
+      <td style="text-align:center">${e.count}</td>
+    </tr>`).join('') : '';
+
     proxySection.innerHTML = `
       <div class="section-title" style="margin-bottom:10px">Proxy &amp; Transport-Analyse</div>
-      <div class="chart-grid" style="margin-bottom:22px">
+      <div class="chart-grid" style="margin-bottom:${hasVmData ? '10px' : '22px'}">
         <div class="chart-card">
           <h3>Transport-Mode</h3>
           <canvas id="chart-proxy-mode" style="max-height:160px"></canvas>
@@ -577,7 +594,29 @@ function renderDashboard(s) {
           <canvas id="chart-proxy-name" style="max-height:160px"></canvas>
           <div id="proxy-name-legend" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;font-size:11px"></div>
         </div>
-      </div>`;
+      </div>
+      ${hasVmData ? `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button id="proxy-adv-btn" onclick="toggleProxyAdv()"
+          style="padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border);
+                 background:var(--surface2);color:var(--text-dim);font-size:11px;cursor:pointer;
+                 transition:all .15s"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+          Advanced Details &#9660;
+        </button>
+      </div>
+      <div id="proxy-adv-table" style="display:none;margin-bottom:22px">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>VM / Task</th><th>Proxy</th><th>Transport-Mode</th><th style="text-align:center">Disks</th>
+            </tr></thead>
+            <tbody>${vmRows}</tbody>
+          </table>
+        </div>
+      </div>` : '<div style="margin-bottom:22px"></div>'}
+      `;
 
     const donutOpts = {
       plugins: {
@@ -744,6 +783,20 @@ function renderPerf(s) {
 }
 
 function destroyCharts() { Object.values(charts).forEach(c => c.destroy()); charts = {}; }
+
+const MODE_COLORS_MAP = {
+  'HotAdd':'#22c55e','DirectSAN':'#60a5fa','NBD/SSL':'#f59e0b','NBD':'#ef4444','NFS Direct':'#a78bfa'
+};
+function modeColor(m) { return MODE_COLORS_MAP[m] || '#8892a4'; }
+
+function toggleProxyAdv() {
+  const t = document.getElementById('proxy-adv-table');
+  const b = document.getElementById('proxy-adv-btn');
+  if (!t || !b) return;
+  const open = t.style.display !== 'none';
+  t.style.display = open ? 'none' : '';
+  b.innerHTML = open ? 'Advanced Details &#9660;' : 'Advanced Details &#9650;';
+}
 
 // ─── Raw Log ──────────────────────────────────────────────────────────────────
 function renderRawLog(s) {
