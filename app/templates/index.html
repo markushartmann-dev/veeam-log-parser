@@ -161,6 +161,12 @@
     .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
     .theme-btn.active { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
 
+    /* ── Language switcher ── */
+    .lang-switcher { display: flex; gap: 4px; margin-left: auto; }
+    .lang-btn { padding: 2px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); cursor: pointer; font-size: 10px; font-weight: 700; line-height: 20px; transition: all .15s; }
+    .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .lang-btn.active { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 
@@ -190,7 +196,15 @@
     <h2>&#9632; Changelog <button onclick="document.getElementById('changelog-overlay').classList.remove('open')">&#215;</button></h2>
 
     <div class="cl-version">
-      <div class="cl-ver-title">v1.0.3 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
+      <div class="cl-ver-title">v1.0.4 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
+      <ul class="cl-items">
+        <li>Deutsch / Englisch Sprachumschalter (DE/EN) — Default: Englisch; Einstellung wird per localStorage gespeichert</li>
+        <li>Alle UI-Texte (Labels, Charts, Tabellen, Filter, Buttons) vollständig übersetzt</li>
+      </ul>
+    </div>
+
+    <div class="cl-version">
+      <div class="cl-ver-title">v1.0.3 <span class="cl-date">2026-08-11</span></div>
       <ul class="cl-items">
         <li>Advanced Details: Schalter in der Proxy-Analyse zeigt pro VM / Task welcher Proxy und Transport-Mode genutzt wurde (inkl. Disk-Anzahl)</li>
         <li>Parser erkennt VM-Namen aus Task-Log-Dateinamen und korreliert sie automatisch mit Proxy-Zuweisung</li>
@@ -237,26 +251,29 @@
 <aside id="sidebar">
   <div id="sidebar-header">
     <h1>&#9632; Veeam Log Parser</h1>
-    <div class="theme-switcher" id="theme-switcher"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <div class="theme-switcher" id="theme-switcher"></div>
+      <div class="lang-switcher" id="lang-switcher"></div>
+    </div>
   </div>
 
   <div id="upload-zone" onclick="document.getElementById('upload-input').click()">
     <div class="icon">&#128196;</div>
-    <strong style="font-size:12px">Log-Dateien ablegen</strong>
-    <p>oder klicken &middot; Job / Task / Agent<br>.log &middot; .txt &middot; max. 200 MB</p>
+    <strong style="font-size:12px" data-i18n="drop_files">Drop log files</strong>
+    <p data-i18n="drop_hint">or click &middot; Job / Task / Agent<br>.log &middot; .txt &middot; max. 200 MB</p>
   </div>
   <input type="file" id="upload-input" multiple accept=".log,.txt" />
-  <button id="upload-btn" disabled>Analysieren</button>
-  <button id="clear-btn" onclick="clearAll()" style="display:none;margin:0 8px 8px;width:calc(100% - 16px);background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#128465; Alle Logs entfernen</button>
+  <button id="upload-btn" disabled data-i18n="analyze">Analyze</button>
+  <button id="clear-btn" onclick="clearAll()" data-i18n="clear_logs" style="display:none;margin:0 8px 8px;width:calc(100% - 16px);background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#128465; Remove all logs</button>
 
   <div id="session-list"></div>
-  <button id="version-btn" onclick="document.getElementById('changelog-overlay').classList.add('open')">v1.0.3 — Changelog</button>
+  <button id="version-btn" onclick="document.getElementById('changelog-overlay').classList.add('open')">v1.0.4 — Changelog</button>
 </aside>
 
 <div id="main">
   <nav id="tabs">
     <div class="tab active" data-tab="dashboard">&#9783; Dashboard</div>
-    <div class="tab" data-tab="errors">&#9888; Fehler &amp; Warnungen <span class="cnt" id="tc-errors">0</span></div>
+    <div class="tab" data-tab="errors"><span data-i18n="tab_errors">&#9888; Errors &amp; Warnings</span> <span class="cnt" id="tc-errors">0</span></div>
     <div class="tab" data-tab="perf">&#10230; Performance</div>
     <div class="tab" data-tab="raw">&#9776; Raw Log <span class="cnt" id="tc-raw">0</span></div>
   </nav>
@@ -265,7 +282,7 @@
     <div id="welcome">
       <div class="big-icon">&#128228;</div>
       <h2>Veeam Log Parser</h2>
-      <p>Lade Job-, Task- oder Agent-Logs hoch. Job-Logs mit mehreren Sessions werden automatisch aufgeteilt.</p>
+      <p data-i18n="welcome_p">Upload Job, Task or Agent logs. Job logs with multiple sessions are split automatically.</p>
     </div>
 
     <!-- Dashboard -->
@@ -273,10 +290,10 @@
       <div class="stats-grid" id="stats-grid"></div>
       <div id="load-section"></div>
       <div id="proxy-section"></div>
-      <div class="section-title" id="vm-section-title" style="display:none">Verarbeitete VMs / Tasks</div>
+      <div class="section-title" id="vm-section-title" data-i18n="vm_section_title" style="display:none">Processed VMs / Tasks</div>
       <div class="table-wrap" id="vm-table-wrap" style="display:none">
         <table><thead><tr>
-          <th>VM / Task</th><th>Status</th><th>Dauer</th><th>Übertragen</th><th>Rate</th>
+          <th>VM / Task</th><th>Status</th><th data-i18n="col_duration">Duration</th><th data-i18n="col_transferred">Transferred</th><th>Rate</th>
         </tr></thead><tbody id="vm-tbody"></tbody></table>
       </div>
     </div>
@@ -284,9 +301,9 @@
     <!-- Errors & Warnings -->
     <div id="panel-errors" class="panel">
       <div id="error-controls" style="display:flex;gap:7px;margin-bottom:13px;flex-wrap:wrap;">
-        <button class="filter-btn active" data-ef="all">Alle</button>
-        <button class="filter-btn f-error" data-ef="error">Fehler</button>
-        <button class="filter-btn f-warn"  data-ef="warning">Warnungen</button>
+        <button class="filter-btn active" data-ef="all"     data-i18n="f_all">All</button>
+        <button class="filter-btn f-error" data-ef="error"  data-i18n="f_errors">Errors</button>
+        <button class="filter-btn f-warn"  data-ef="warning" data-i18n="f_warnings">Warnings</button>
         <button class="filter-btn f-info"  data-ef="info">Info</button>
       </div>
       <div id="error-list"></div>
@@ -295,22 +312,22 @@
     <!-- Performance -->
     <div id="panel-perf" class="panel">
       <div class="chart-grid">
-        <div class="chart-card"><h3>Backup-Status (alle Sessions)</h3><canvas id="chart-status"></canvas></div>
-        <div class="chart-card"><h3>Quell-Datenmenge (GB)</h3><canvas id="chart-data"></canvas></div>
-        <div class="chart-card"><h3>Backup-Gr&ouml;&szlig;e komprimiert (GB)</h3><canvas id="chart-backup"></canvas></div>
-        <div class="chart-card"><h3>Dauer (Minuten)</h3><canvas id="chart-duration"></canvas></div>
+        <div class="chart-card"><h3 data-i18n="chart_status">Backup Status (all sessions)</h3><canvas id="chart-status"></canvas></div>
+        <div class="chart-card"><h3 data-i18n="chart_data">Source Data (GB)</h3><canvas id="chart-data"></canvas></div>
+        <div class="chart-card"><h3 data-i18n="chart_backup">Backup Size compressed (GB)</h3><canvas id="chart-backup"></canvas></div>
+        <div class="chart-card"><h3 data-i18n="chart_duration">Duration (minutes)</h3><canvas id="chart-duration"></canvas></div>
       </div>
-      <div class="section-title">Aktuelle Session — Details</div>
+      <div class="section-title" data-i18n="perf_current">Current Session — Details</div>
       <div class="stats-grid" id="perf-stats"></div>
     </div>
 
     <!-- Raw Log -->
     <div id="panel-raw" class="panel">
       <div id="log-controls">
-        <input type="text" id="log-search" placeholder="&#128269; Suche in Nachrichten..." oninput="filterLog()" />
-        <button class="filter-btn active" data-lf="all"     onclick="setLogFilter('all',this)">Alle</button>
-        <button class="filter-btn f-error" data-lf="error"   onclick="setLogFilter('error',this)">Fehler</button>
-        <button class="filter-btn f-warn"  data-lf="warning" onclick="setLogFilter('warning',this)">Warnungen</button>
+        <input type="text" id="log-search" data-i18n="log_search_ph" placeholder="&#128269; Search messages..." oninput="filterLog()" />
+        <button class="filter-btn active" data-lf="all"     onclick="setLogFilter('all',this)"     data-i18n="f_all">All</button>
+        <button class="filter-btn f-error" data-lf="error"  onclick="setLogFilter('error',this)"   data-i18n="f_errors">Errors</button>
+        <button class="filter-btn f-warn"  data-lf="warning" onclick="setLogFilter('warning',this)" data-i18n="f_warnings">Warnings</button>
         <span id="log-count"></span>
       </div>
       <div id="log-table-wrap">
@@ -320,7 +337,7 @@
             <th class="ll-ts">Timestamp</th>
             <th class="ll-thr">Thread</th>
             <th class="ll-lvl">Level</th>
-            <th>Nachricht</th>
+            <th data-i18n="col_message">Message</th>
           </tr></thead>
           <tbody id="log-tbody"></tbody>
         </table>
@@ -399,7 +416,91 @@ function renderThemeSwitcher() {
   ).join('');
   el.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 }
-document.addEventListener('DOMContentLoaded', renderThemeSwitcher);
+document.addEventListener('DOMContentLoaded', () => { renderThemeSwitcher(); renderLangSwitcher(); applyLang(); });
+
+// ─── i18n ─────────────────────────────────────────────────────────────────────
+const LANGS = {
+  en: {
+    drop_files:'Drop log files', drop_hint:'or click &middot; Job / Task / Agent<br>.log &middot; .txt &middot; max. 200 MB',
+    analyze:'Analyze', clear_logs:'&#128465; Remove all logs',
+    tab_errors:'&#9888; Errors &amp; Warnings',
+    welcome_p:'Upload Job, Task or Agent logs. Job logs with multiple sessions are split automatically.',
+    f_all:'All', f_errors:'Errors', f_warnings:'Warnings',
+    vm_section_title:'Processed VMs / Tasks', col_duration:'Duration', col_transferred:'Transferred', col_message:'Message',
+    stat_errors:'Errors', stat_warnings:'Warnings', stat_duration:'Duration',
+    stat_source:'Source data', stat_backed_incr:'Backed up (incremental)',
+    stat_backup_compr:'Backup size (compressed)', stat_source_raw:'Source data (raw)',
+    stat_dedup:'Deduplication', stat_compr:'Compression',
+    stat_all_ok:'all successful', stat_failed:'failed', stat_repo:'Repo total',
+    load_title:'Load Distribution',
+    proxy_title:'Proxy &amp; Transport Analysis', proxy_mode_chart:'Transport Mode',
+    proxy_dist_chart:'Proxy Distribution', proxy_tasks_unit:'Tasks',
+    adv_col_mode:'Transport Mode', adv_col_disks:'Disks',
+    chart_status:'Backup Status (all sessions)', chart_data:'Source Data (GB)',
+    chart_backup:'Backup Size compressed (GB)', chart_duration:'Duration (minutes)',
+    perf_current:'Current Session — Details',
+    perf_backed:'Backed up', perf_compr:'Compressed', perf_source:'Source data',
+    no_entries:'&#10003; No entries', entry_line:'Line',
+    log_search_ph:'&#128269; Search messages…', log_lines:'lines',
+    uploading:'Analyzing…', file_hint:'file(s) — analyze',
+    toast_only_log:'Only .log / .txt files', toast_loaded:'session(s) loaded', toast_error:'Error: ',
+  },
+  de: {
+    drop_files:'Log-Dateien ablegen', drop_hint:'oder klicken &middot; Job / Task / Agent<br>.log &middot; .txt &middot; max. 200 MB',
+    analyze:'Analysieren', clear_logs:'&#128465; Alle Logs entfernen',
+    tab_errors:'&#9888; Fehler &amp; Warnungen',
+    welcome_p:'Lade Job-, Task- oder Agent-Logs hoch. Job-Logs mit mehreren Sessions werden automatisch aufgeteilt.',
+    f_all:'Alle', f_errors:'Fehler', f_warnings:'Warnungen',
+    vm_section_title:'Verarbeitete VMs / Tasks', col_duration:'Dauer', col_transferred:'&Uuml;bertragen', col_message:'Nachricht',
+    stat_errors:'Fehler', stat_warnings:'Warnungen', stat_duration:'Dauer',
+    stat_source:'Quelldaten', stat_backed_incr:'Gesichert (inkremental)',
+    stat_backup_compr:'Backup-Gr&ouml;&szlig;e (komprimiert)', stat_source_raw:'Quelldaten (raw)',
+    stat_dedup:'Deduplizierung', stat_compr:'Komprimierung',
+    stat_all_ok:'alle erfolgreich', stat_failed:'fehlgeschlagen', stat_repo:'Repo gesamt',
+    load_title:'Last-Verteilung',
+    proxy_title:'Proxy &amp; Transport-Analyse', proxy_mode_chart:'Transport-Mode',
+    proxy_dist_chart:'Proxy-Verteilung', proxy_tasks_unit:'Tasks',
+    adv_col_mode:'Transport-Mode', adv_col_disks:'Disks',
+    chart_status:'Backup-Status (alle Sessions)', chart_data:'Quell-Datenmenge (GB)',
+    chart_backup:'Backup-Gr&ouml;&szlig;e komprimiert (GB)', chart_duration:'Dauer (Minuten)',
+    perf_current:'Aktuelle Session &mdash; Details',
+    perf_backed:'Gesichert', perf_compr:'Komprimiert', perf_source:'Quelldaten',
+    no_entries:'&#10003; Keine Eintr&auml;ge', entry_line:'Zeile',
+    log_search_ph:'&#128269; Suche in Nachrichten…', log_lines:'Zeilen',
+    uploading:'Analysiere…', file_hint:'Datei(en) analysieren',
+    toast_only_log:'Nur .log / .txt Dateien', toast_loaded:'Session(s) geladen', toast_error:'Fehler: ',
+  }
+};
+let _lang = localStorage.getItem('vlp-lang') || 'en';
+function t(key) { return (LANGS[_lang] || LANGS.en)[key] || key; }
+function setLang(lang) {
+  _lang = lang;
+  localStorage.setItem('vlp-lang', lang);
+  applyLang();
+}
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (el.tagName === 'INPUT') el.placeholder = t(key).replace(/&[a-z]+;|&#\d+;/g, c => { const d=document.createElement('div'); d.innerHTML=c; return d.textContent; });
+    else el.innerHTML = t(key);
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === _lang));
+  if (activeIdx >= 0) {
+    const s = sessions[activeIdx];
+    destroyCharts();
+    renderDashboard(s);
+    renderErrors(s);
+    renderPerf(s);
+    renderRawLog(s);
+  }
+}
+function renderLangSwitcher() {
+  const el = document.getElementById('lang-switcher');
+  if (!el) return;
+  el.innerHTML = ['EN','DE'].map(l =>
+    `<button class="lang-btn${_lang===l.toLowerCase()?' active':''}" data-lang="${l.toLowerCase()}" onclick="setLang('${l.toLowerCase()}')">${l}</button>`
+  ).join('');
+}
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let sessions = [];
@@ -420,23 +521,23 @@ const uploadZone  = document.getElementById('upload-zone');
 uploadInput.addEventListener('change', () => {
   pendingFiles = Array.from(uploadInput.files);
   uploadBtn.disabled = !pendingFiles.length;
-  uploadBtn.textContent = pendingFiles.length ? `${pendingFiles.length} Datei(en) analysieren` : 'Analysieren';
+  uploadBtn.textContent = pendingFiles.length ? `${pendingFiles.length} ${t('file_hint')}` : t('analyze');
 });
 
 ['dragover', 'dragenter'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.add('drag-over'); }));
 ['dragleave', 'drop'].forEach(e => uploadZone.addEventListener(e, ev => { ev.preventDefault(); uploadZone.classList.remove('drag-over'); }));
 uploadZone.addEventListener('drop', e => {
   const files = Array.from(e.dataTransfer.files).filter(f => /\.(log|txt)$/i.test(f.name));
-  if (!files.length) { showToast('Nur .log / .txt Dateien', true); return; }
+  if (!files.length) { showToast(t('toast_only_log'), true); return; }
   pendingFiles = files;
   uploadBtn.disabled = false;
-  uploadBtn.textContent = `${files.length} Datei(en) analysieren`;
+  uploadBtn.textContent = `${files.length} ${t('file_hint')}`;
 });
 
 uploadBtn.addEventListener('click', async () => {
   if (!pendingFiles.length) return;
   uploadBtn.disabled = true;
-  uploadBtn.innerHTML = '<span class="spinner"></span>Analysiere…';
+  uploadBtn.innerHTML = `<span class="spinner"></span>${t('uploading')}`;
   const fd = new FormData();
   pendingFiles.forEach(f => fd.append('files', f));
   try {
@@ -453,11 +554,11 @@ uploadBtn.addEventListener('click', async () => {
     if (added > 0) setActive(sessions.length - added);
     pendingFiles = [];
     uploadInput.value = '';
-    uploadBtn.textContent = 'Analysieren';
-    showToast(`${added} Session(s) geladen`);
+    uploadBtn.textContent = t('analyze');
+    showToast(`${added} ${t('toast_loaded')}`);
   } catch(e) {
-    showToast('Fehler: ' + e.message, true);
-    uploadBtn.textContent = 'Analysieren';
+    showToast(t('toast_error') + e.message, true);
+    uploadBtn.textContent = t('analyze');
   }
   uploadBtn.disabled = false;
 });
@@ -508,30 +609,30 @@ function renderDashboard(s) {
   const grid = document.getElementById('stats-grid');
 
   const cards = [
-    { label: 'Status',   value: s.status,   cls: s.status.toLowerCase(), big: true },
-    { label: 'Fehler',   value: s.error_count,   cls: 'c-error' },
-    { label: 'Warnungen',value: s.warning_count, cls: 'c-warning' },
-    { label: 'Dauer',    value: dur,         cls: '', small: true },
+    { label: 'Status',            value: s.status,          cls: s.status.toLowerCase(), big: true },
+    { label: t('stat_errors'),    value: s.error_count,     cls: 'c-error' },
+    { label: t('stat_warnings'),  value: s.warning_count,   cls: 'c-warning' },
+    { label: t('stat_duration'),  value: dur,               cls: '', small: true },
   ];
 
   if (s.transferred_gb != null)
-    cards.push({ label: 'Quelldaten',  value: fmtGb(s.transferred_gb), cls: 'c-accent', small: true });
+    cards.push({ label: t('stat_source'),       value: fmtGb(s.transferred_gb), cls: 'c-accent', small: true });
   if (s.backed_up_gb != null)
-    cards.push({ label: 'Gesichert (inkremental)', value: fmtGb(s.backed_up_gb), cls: '', small: true });
+    cards.push({ label: t('stat_backed_incr'),  value: fmtGb(s.backed_up_gb),   cls: '', small: true });
   if (s.backup_size_gb != null)
-    cards.push({ label: 'Backup-Größe (komprimiert)', value: fmtGb(s.backup_size_gb), cls: '', small: true });
+    cards.push({ label: t('stat_backup_compr'), value: fmtGb(s.backup_size_gb), cls: '', small: true });
   if (s.data_size_gb != null)
-    cards.push({ label: 'Quelldaten (raw)', value: fmtGb(s.data_size_gb), cls: '', small: true });
+    cards.push({ label: t('stat_source_raw'),   value: fmtGb(s.data_size_gb),   cls: '', small: true });
   if (s.dedup_ratio != null)
-    cards.push({ label: 'Deduplizierung', value: s.dedup_ratio + '%', cls: 'c-accent', small: true });
+    cards.push({ label: t('stat_dedup'),        value: s.dedup_ratio + '%',      cls: 'c-accent', small: true });
   if (s.compress_ratio != null)
-    cards.push({ label: 'Komprimierung', value: s.compress_ratio + '%', cls: 'c-accent', small: true });
+    cards.push({ label: t('stat_compr'),        value: s.compress_ratio + '%',   cls: 'c-accent', small: true });
   if (s.total_tasks != null)
-    cards.push({ label: 'Tasks', value: `${s.successful_tasks}/${s.total_tasks}`, cls: s.failed_tasks > 0 ? 'c-error' : 'c-success', small: true, sub: s.failed_tasks > 0 ? `${s.failed_tasks} fehlgeschlagen` : 'alle erfolgreich' });
+    cards.push({ label: 'Tasks', value: `${s.successful_tasks}/${s.total_tasks}`, cls: s.failed_tasks > 0 ? 'c-error' : 'c-success', small: true, sub: s.failed_tasks > 0 ? `${s.failed_tasks} ${t('stat_failed')}` : t('stat_all_ok') });
   if (s.bottleneck)
-    cards.push({ label: 'Bottleneck', value: s.bottleneck, cls: '', small: true });
+    cards.push({ label: 'Bottleneck',           value: s.bottleneck,             cls: '', small: true });
   if (s.total_repo_gb != null)
-    cards.push({ label: 'Repo gesamt', value: fmtGb(s.total_repo_gb), cls: '', small: true });
+    cards.push({ label: t('stat_repo'),         value: fmtGb(s.total_repo_gb),  cls: '', small: true });
 
   grid.innerHTML = cards.map(c => `
     <div class="stat-card ${c.cls || ''}">
@@ -546,7 +647,7 @@ function renderDashboard(s) {
     const colors = { source: '#ef4444', proxy: '#f59e0b', network: '#22c55e', target: '#60a5fa' };
     const labels = { source: 'Source', proxy: 'Proxy', network: 'Network', target: 'Target' };
     loadSec.innerHTML = `<div class="load-bar-wrap">
-      <h3>Last-Verteilung</h3>
+      <h3>${t('load_title')}</h3>
       ${Object.entries(s.load).map(([k, v]) => `
         <div class="load-row">
           <span class="lbl">${labels[k]}</span>
@@ -582,15 +683,15 @@ function renderDashboard(s) {
     </tr>`).join('') : '';
 
     proxySection.innerHTML = `
-      <div class="section-title" style="margin-bottom:10px">Proxy &amp; Transport-Analyse</div>
+      <div class="section-title" style="margin-bottom:10px">${t('proxy_title')}</div>
       <div class="chart-grid" style="margin-bottom:${hasVmData ? '10px' : '22px'}">
         <div class="chart-card">
-          <h3>Transport-Mode</h3>
+          <h3>${t('proxy_mode_chart')}</h3>
           <canvas id="chart-proxy-mode" style="max-height:160px"></canvas>
           <div id="proxy-mode-legend" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;font-size:11px"></div>
         </div>
         <div class="chart-card">
-          <h3>Proxy-Verteilung</h3>
+          <h3>${t('proxy_dist_chart')}</h3>
           <canvas id="chart-proxy-name" style="max-height:160px"></canvas>
           <div id="proxy-name-legend" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;font-size:11px"></div>
         </div>
@@ -610,7 +711,7 @@ function renderDashboard(s) {
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>VM / Task</th><th>Proxy</th><th>Transport-Mode</th><th style="text-align:center">Disks</th>
+              <th>VM / Task</th><th>Proxy</th><th>${t('adv_col_mode')}</th><th style="text-align:center">${t('adv_col_disks')}</th>
             </tr></thead>
             <tbody>${vmRows}</tbody>
           </table>
@@ -637,7 +738,7 @@ function renderDashboard(s) {
       `<span style="display:inline-flex;align-items:center;gap:4px">
         <span style="width:10px;height:10px;border-radius:2px;background:${modeColors[i]};flex-shrink:0;display:inline-block"></span>
         <span style="color:var(--text)">${esc(l)}</span>
-        <span style="color:var(--text-dim)">${modeData[i]}&nbsp;Tasks</span>
+        <span style="color:var(--text-dim)">${modeData[i]}&nbsp;${t('proxy_tasks_unit')}</span>
       </span>`
     ).join('');
 
@@ -703,7 +804,7 @@ function renderErrors(s) {
 
   const el = document.getElementById('error-list');
   if (!items.length) {
-    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:14px">&#10003; Keine Eintr&auml;ge</div>';
+    el.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:14px">${t('no_entries')}</div>`;
     return;
   }
   el.innerHTML = items.map(e => {
@@ -715,7 +816,7 @@ function renderErrors(s) {
         <span class="badge ${lvl}">${e.level}</span>
         ${e.timestamp ? `<span class="entry-ts">${esc(e.timestamp)}</span>` : ''}
         ${e.thread ? `<span class="entry-ts">&lt;${esc(e.thread)}&gt;</span>` : ''}
-        <span class="entry-line">Zeile ${e.line_number}</span>
+        <span class="entry-line">${t('entry_line')} ${e.line_number}</span>
       </div>
       <div class="entry-msg">${esc(e.message)}</div>
     </div>`;
@@ -769,12 +870,12 @@ function renderPerf(s) {
   // Perf stats for current session
   const ps = document.getElementById('perf-stats');
   const items = [];
-  if (s.dedup_ratio != null)    items.push(['Deduplizierung', s.dedup_ratio + '%', 'c-accent']);
-  if (s.compress_ratio != null) items.push(['Komprimierung', s.compress_ratio + '%', 'c-accent']);
+  if (s.dedup_ratio != null)    items.push([t('stat_dedup'), s.dedup_ratio + '%', 'c-accent']);
+  if (s.compress_ratio != null) items.push([t('stat_compr'), s.compress_ratio + '%', 'c-accent']);
   if (s.bottleneck)             items.push(['Bottleneck', s.bottleneck, '']);
-  if (s.backed_up_gb != null)   items.push(['Gesichert', fmtGb(s.backed_up_gb), '']);
-  if (s.backup_size_gb != null) items.push(['Komprimiert', fmtGb(s.backup_size_gb), '']);
-  if (s.data_size_gb != null)   items.push(['Quelldaten', fmtGb(s.data_size_gb), '']);
+  if (s.backed_up_gb != null)   items.push([t('perf_backed'), fmtGb(s.backed_up_gb), '']);
+  if (s.backup_size_gb != null) items.push([t('perf_compr'), fmtGb(s.backup_size_gb), '']);
+  if (s.data_size_gb != null)   items.push([t('perf_source'), fmtGb(s.data_size_gb), '']);
   ps.innerHTML = items.map(([l, v, c]) => `
     <div class="stat-card ${c}">
       <div class="label">${l}</div>
@@ -832,7 +933,7 @@ function renderLogPage() {
   const q = document.getElementById('log-search').value;
   const total = filteredEntries.length;
   const page = filteredEntries.slice(logPage * PAGE_SIZE, (logPage + 1) * PAGE_SIZE);
-  document.getElementById('log-count').textContent = total.toLocaleString('de') + ' Zeilen';
+  document.getElementById('log-count').textContent = total.toLocaleString('de') + ' ' + t('log_lines');
 
   document.getElementById('log-tbody').innerHTML = page.map(e => {
     const lvl = (e.level || 'info').toLowerCase();
@@ -883,7 +984,7 @@ function clearAll() {
   pendingFiles = [];
   uploadInput.value = '';
   uploadBtn.disabled = true;
-  uploadBtn.textContent = 'Analysieren';
+  uploadBtn.textContent = t('analyze');
   document.getElementById('session-list').innerHTML = '';
   document.getElementById('clear-btn').style.display = 'none';
   document.getElementById('welcome').style.display = '';
