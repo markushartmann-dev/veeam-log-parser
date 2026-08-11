@@ -195,56 +195,7 @@
   <div id="changelog-box">
     <h2>&#9632; Changelog <button onclick="document.getElementById('changelog-overlay').classList.remove('open')">&#215;</button></h2>
 
-    <div class="cl-version">
-      <div class="cl-ver-title">v1.0.4 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
-      <ul class="cl-items">
-        <li>Deutsch / Englisch Sprachumschalter (DE/EN) — Default: Englisch; Einstellung wird per localStorage gespeichert</li>
-        <li>Alle UI-Texte (Labels, Charts, Tabellen, Filter, Buttons) vollständig übersetzt</li>
-      </ul>
-    </div>
-
-    <div class="cl-version">
-      <div class="cl-ver-title">v1.0.3 <span class="cl-date">2026-08-11</span></div>
-      <ul class="cl-items">
-        <li>Advanced Details: Schalter in der Proxy-Analyse zeigt pro VM / Task welcher Proxy und Transport-Mode genutzt wurde (inkl. Disk-Anzahl)</li>
-        <li>Parser erkennt VM-Namen aus Task-Log-Dateinamen und korreliert sie automatisch mit Proxy-Zuweisung</li>
-        <li>Fallback-Erkennung des Transport-Modes aus Task-Log-Textzeilen (HotAdd, DirectSAN, NBD/SSL, NBD)</li>
-      </ul>
-    </div>
-
-    <div class="cl-version">
-      <div class="cl-ver-title">v1.0.2 <span class="cl-date">2026-08-11</span></div>
-      <ul class="cl-items">
-        <li>Proxy &amp; Transport-Analyse: zwei Donut-Charts im Dashboard zeigen Verteilung nach Proxy-Server und VDDK-Transport-Mode (HotAdd, DirectSAN, NBD/SSL, NBD)</li>
-        <li>Sidebar-Untertitel entfernt, Versionsnummer unten links ergänzt</li>
-        <li>Klick auf Versionsnummer öffnet diesen Changelog</li>
-      </ul>
-    </div>
-
-    <div class="cl-version">
-      <div class="cl-ver-title">v1.0.1 <span class="cl-date">2026-08-11</span></div>
-      <ul class="cl-items">
-        <li>Info-Filter im Tab „Fehler &amp; Warnungen" ergänzt</li>
-        <li>Button „Alle Logs entfernen" zum Zurücksetzen hinzugefügt</li>
-        <li>Vier Farbthemen: Dark, Light, Veeam Corporate, Hello Kitty</li>
-        <li>SVG-Favicon</li>
-        <li>Projekt auf GitHub veröffentlicht</li>
-      </ul>
-    </div>
-
-    <div class="cl-version">
-      <div class="cl-ver-title">v1.0.0 <span class="cl-date">2026-08-10</span></div>
-      <ul class="cl-items">
-        <li>Initiales Release</li>
-        <li>Unterstützung für Job-, Task- und Agent-Logs (Veeam B&amp;R 12.x)</li>
-        <li>Automatische Aufteilung von Multi-Session Job-Logs</li>
-        <li>Dashboard mit Status, Fehler, Dauer, Datenmenge, Deduplizierung, Komprimierung</li>
-        <li>Last-Verteilung (Source / Proxy / Network / Target)</li>
-        <li>Tab „Fehler &amp; Warnungen" mit Filter</li>
-        <li>Performance-Charts über alle Sessions</li>
-        <li>Raw-Log-Viewer mit Suche und Paginierung</li>
-      </ul>
-    </div>
+    <div id="changelog-body"></div>
   </div>
 </div>
 
@@ -485,6 +436,7 @@ function applyLang() {
     else el.innerHTML = t(key);
   });
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === _lang));
+  renderChangelog();
   if (activeIdx >= 0) {
     const s = sessions[activeIdx];
     destroyCharts();
@@ -500,6 +452,64 @@ function renderLangSwitcher() {
   el.innerHTML = ['EN','DE'].map(l =>
     `<button class="lang-btn${_lang===l.toLowerCase()?' active':''}" data-lang="${l.toLowerCase()}" onclick="setLang('${l.toLowerCase()}')">${l}</button>`
   ).join('');
+}
+const CHANGELOG = [
+  { ver: 'v1.0.4', date: '2026-08-11', latest: true,
+    en: ['DE/EN language switcher — default English; preference saved in localStorage',
+         'All UI texts (labels, charts, tables, filters, buttons) fully translated'],
+    de: ['Deutsch / Englisch Sprachumschalter (DE/EN) — Default: Englisch; Einstellung wird per localStorage gespeichert',
+         'Alle UI-Texte (Labels, Charts, Tabellen, Filter, Buttons) vollständig übersetzt'] },
+  { ver: 'v1.0.3', date: '2026-08-11',
+    en: ['Advanced Details toggle in proxy analysis shows per-VM / task which proxy and transport mode was used (incl. disk count)',
+         'Parser detects VM names from Task log filenames and correlates them automatically with proxy assignment',
+         'Fallback detection of transport mode from Task log text lines (HotAdd, DirectSAN, NBD/SSL, NBD)'],
+    de: ['Advanced Details: Schalter in der Proxy-Analyse zeigt pro VM / Task welcher Proxy und Transport-Mode genutzt wurde (inkl. Disk-Anzahl)',
+         'Parser erkennt VM-Namen aus Task-Log-Dateinamen und korreliert sie automatisch mit Proxy-Zuweisung',
+         'Fallback-Erkennung des Transport-Modes aus Task-Log-Textzeilen (HotAdd, DirectSAN, NBD/SSL, NBD)'] },
+  { ver: 'v1.0.2', date: '2026-08-11',
+    en: ['Proxy &amp; Transport Analysis: two donut charts in the dashboard show distribution by proxy server and VDDK transport mode (HotAdd, DirectSAN, NBD/SSL, NBD)',
+         'Sidebar subtitle removed, version number added bottom-left',
+         'Click on version number opens this changelog'],
+    de: ['Proxy &amp; Transport-Analyse: zwei Donut-Charts im Dashboard zeigen Verteilung nach Proxy-Server und VDDK-Transport-Mode (HotAdd, DirectSAN, NBD/SSL, NBD)',
+         'Sidebar-Untertitel entfernt, Versionsnummer unten links ergänzt',
+         'Klick auf Versionsnummer öffnet diesen Changelog'] },
+  { ver: 'v1.0.1', date: '2026-08-11',
+    en: ['Info filter added to Errors &amp; Warnings tab',
+         'Button "Remove all logs" added for resetting',
+         'Four color themes: Dark, Light, Veeam Corporate, Hello Kitty',
+         'SVG favicon',
+         'Project published on GitHub'],
+    de: ['Info-Filter im Tab „Fehler &amp; Warnungen" ergänzt',
+         'Button „Alle Logs entfernen" zum Zurücksetzen hinzugefügt',
+         'Vier Farbthemen: Dark, Light, Veeam Corporate, Hello Kitty',
+         'SVG-Favicon',
+         'Projekt auf GitHub veröffentlicht'] },
+  { ver: 'v1.0.0', date: '2026-08-10',
+    en: ['Initial release',
+         'Support for Job, Task and Agent logs (Veeam B&amp;R 12.x)',
+         'Automatic splitting of multi-session Job logs',
+         'Dashboard with status, errors, duration, data volume, deduplication, compression',
+         'Load distribution (Source / Proxy / Network / Target)',
+         'Errors &amp; Warnings tab with filter',
+         'Performance charts across all sessions',
+         'Raw log viewer with search and pagination'],
+    de: ['Initiales Release',
+         'Unterstützung für Job-, Task- und Agent-Logs (Veeam B&amp;R 12.x)',
+         'Automatische Aufteilung von Multi-Session Job-Logs',
+         'Dashboard mit Status, Fehler, Dauer, Datenmenge, Deduplizierung, Komprimierung',
+         'Last-Verteilung (Source / Proxy / Network / Target)',
+         'Tab „Fehler &amp; Warnungen" mit Filter',
+         'Performance-Charts über alle Sessions',
+         'Raw-Log-Viewer mit Suche und Paginierung'] }
+];
+function renderChangelog() {
+  const el = document.getElementById('changelog-body');
+  if (!el) return;
+  el.innerHTML = CHANGELOG.map(v => `
+    <div class="cl-version">
+      <div class="cl-ver-title">${v.ver}${v.latest ? ' <span class="cl-badge">latest</span>' : ''} <span class="cl-date">${v.date}</span></div>
+      <ul class="cl-items">${(v[_lang] || v.en).map(li => `<li>${li}</li>`).join('')}</ul>
+    </div>`).join('');
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
