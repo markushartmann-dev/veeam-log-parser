@@ -163,9 +163,67 @@
 
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+    /* ── Changelog modal ── */
+    #changelog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; display: none; align-items: center; justify-content: center; }
+    #changelog-overlay.open { display: flex; }
+    #changelog-box { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius)*1.5); width: 420px; max-width: calc(100vw - 32px); max-height: 80vh; overflow-y: auto; padding: 24px 26px; }
+    #changelog-box h2 { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+    #changelog-box h2 button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
+    #changelog-box h2 button:hover { color: var(--text); }
+    .cl-version { margin-bottom: 20px; }
+    .cl-version:last-child { margin-bottom: 0; }
+    .cl-ver-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .cl-ver-title .cl-badge { font-size: 10px; font-weight: 700; background: var(--accent-dim); color: #fff; padding: 1px 7px; border-radius: 999px; }
+    .cl-ver-title .cl-date { font-size: 10px; color: var(--text-dim); font-weight: 400; }
+    .cl-items { list-style: none; padding: 0; margin: 0; }
+    .cl-items li { font-size: 12px; color: var(--text-dim); padding: 3px 0 3px 14px; position: relative; line-height: 1.5; }
+    .cl-items li::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
+    #version-btn { cursor: pointer; padding: 10px 16px; font-size: 10px; color: var(--text-dim); border-top: 1px solid var(--border); background: none; border-left: none; border-right: none; border-bottom: none; width: 100%; text-align: left; transition: color .15s; }
+    #version-btn:hover { color: var(--accent); }
   </style>
 </head>
 <body>
+
+<div id="changelog-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div id="changelog-box">
+    <h2>&#9632; Changelog <button onclick="document.getElementById('changelog-overlay').classList.remove('open')">&#215;</button></h2>
+
+    <div class="cl-version">
+      <div class="cl-ver-title">v1.0.2 <span class="cl-badge">latest</span> <span class="cl-date">2026-08-11</span></div>
+      <ul class="cl-items">
+        <li>Proxy &amp; Transport-Analyse: zwei Donut-Charts im Dashboard zeigen Verteilung nach Proxy-Server und VDDK-Transport-Mode (HotAdd, DirectSAN, NBD/SSL, NBD)</li>
+        <li>Sidebar-Untertitel entfernt, Versionsnummer unten links ergänzt</li>
+        <li>Klick auf Versionsnummer öffnet diesen Changelog</li>
+      </ul>
+    </div>
+
+    <div class="cl-version">
+      <div class="cl-ver-title">v1.0.1 <span class="cl-date">2026-08-11</span></div>
+      <ul class="cl-items">
+        <li>Info-Filter im Tab „Fehler &amp; Warnungen" ergänzt</li>
+        <li>Button „Alle Logs entfernen" zum Zurücksetzen hinzugefügt</li>
+        <li>Vier Farbthemen: Dark, Light, Veeam Corporate, Hello Kitty</li>
+        <li>SVG-Favicon</li>
+        <li>Projekt auf GitHub veröffentlicht</li>
+      </ul>
+    </div>
+
+    <div class="cl-version">
+      <div class="cl-ver-title">v1.0.0 <span class="cl-date">2026-08-10</span></div>
+      <ul class="cl-items">
+        <li>Initiales Release</li>
+        <li>Unterstützung für Job-, Task- und Agent-Logs (Veeam B&amp;R 12.x)</li>
+        <li>Automatische Aufteilung von Multi-Session Job-Logs</li>
+        <li>Dashboard mit Status, Fehler, Dauer, Datenmenge, Deduplizierung, Komprimierung</li>
+        <li>Last-Verteilung (Source / Proxy / Network / Target)</li>
+        <li>Tab „Fehler &amp; Warnungen" mit Filter</li>
+        <li>Performance-Charts über alle Sessions</li>
+        <li>Raw-Log-Viewer mit Suche und Paginierung</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <aside id="sidebar">
   <div id="sidebar-header">
@@ -183,7 +241,7 @@
   <button id="clear-btn" onclick="clearAll()" style="display:none;margin:0 8px 8px;width:calc(100% - 16px);background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#128465; Alle Logs entfernen</button>
 
   <div id="session-list"></div>
-  <div style="padding:10px 16px;font-size:10px;color:var(--text-dim);border-top:1px solid var(--border)">v1.0.1</div>
+  <button id="version-btn" onclick="document.getElementById('changelog-overlay').classList.add('open')">v1.0.2 — Changelog</button>
 </aside>
 
 <div id="main">
